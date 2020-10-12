@@ -30,7 +30,7 @@ class CalHashFrame(tk.Frame):  # 继承Frame类
 
         args = []  # 存放要计算的算法
         for temp in self.vars:
-            if temp:
+            if temp.get():
                 args.append(temp.get())
         self.pb2["maximum"] = len(path_list)  # 总项目数
         for item in path_list:

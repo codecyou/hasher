@@ -3,6 +3,7 @@
 import hashlib
 import os
 import time
+import threading
 
 
 func_dict = {
@@ -14,6 +15,7 @@ func_dict = {
 	"sha384": ("sha384", hashlib.sha384)
 }
 
+rate_value = 0  # 用来记录当前读取的字节数
 
 def get_md5(file_path, read_bytes=1024):
 	"""
@@ -34,7 +36,7 @@ def get_md5(file_path, read_bytes=1024):
 	return ret
 
 
-def match(file_path, func_info, frame, read_bytes=8092):
+def match(file_path, func_info, frame, read_bytes=10240):
 	"""
 	用于计算文件的hash值
 	:param func_info: ("sha1", hashlib.sha1), 方法信息元组
@@ -72,6 +74,64 @@ def match(file_path, func_info, frame, read_bytes=8092):
 	return ret
 
 
+
+def match2(file_path, args, frame, read_bytes=8092):
+	"""
+	用于计算文件的hash值
+	:param func_info: ("sha1", hashlib.sha1), 方法信息元组
+	:param file_path: 文件地址
+	:param read_bytes: 一次读取的字节数
+	:return: ret={”算法类型“:func.hexdigest()}
+	"""
+	# h = hashlib.sha1()
+	# func = func_info[1]()
+	global rate_value
+	rate_value = 0  # 进度值置零还原
+	func_list = []
+	# print(args)
+	for item in args:
+		if item in func_dict:
+			func_list.append(func_dict[item][1]())
+	# print(func_list)
+	total_size = os.path.getsize(file_path)
+	# count = 0  # 用以计算读取文件数据段次数
+	frame.pb1["maximum"] = total_size
+	frame.pb1["value"] = 0
+	if total_size == 0:
+		print("\r该文件内容为空！", end='')
+	threading.Thread(target=show_rate, args=(frame, total_size)).start()
+	with open(file_path, 'rb') as f:
+		while True:
+			rate_value += read_bytes
+			data = f.read(read_bytes)
+			if data:
+				# h.update(data)
+				for func in func_list:
+					func.update(data)
+			else:
+				rate_value = total_size  # 为防止主线程，子线程还没运行完，导致进度条出现bug的问题
+				break
+	# ret = h.hexdigest()
+	# ret = {func_info[0]: func.hexdigest()}
+	ret = {}
+	for index, item in enumerate(args):
+		# print(index, item)
+		ret[item] = func_list[index].hexdigest()
+	# frame.pb1["value"] = total_size  # 为防止主线程，子线程还没运行完，导致进度条出现bug的问题
+	# print(str(ret))
+	return ret
+
+
+def show_rate(frame, total_size):
+	global rate_value
+	while True:
+		frame.pb1["value"] = rate_value
+		# print(rate_value)
+		if rate_value >= total_size:
+			frame.pb1["value"] = rate_value
+			break
+
+
 def cal_hash_by_path(file_path, args, frame):
 	"""
 	用于提供外部调用，计算hash值
@@ -86,10 +146,13 @@ def cal_hash_by_path(file_path, args, frame):
 		mtime = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(os.path.getmtime(file_path)))
 		ret = {"size": size, "mtime": mtime}  # 用于储存单个文件的hash值信息{'size':xxx, "mtime":xxx, 'sha1':xxx,'sha256':xxx,'md5':xxx}
 		print("正在计算: %s" % file_path)
-		for item in args:
-			if item in func_dict:
-				ret.update(match(file_path, func_dict[item], frame))
-		result = {file_path: ret}  # 用于储存结果{file:{"sha1":xxx,“sha256”:xxx,},}
+		# for item in args:
+		# 	if item in func_dict:
+				# ret.update(match(file_path, func_dict[item], frame))
+		# result = {file_path: ret}  # 用于储存结果{file:{"sha1":xxx,“sha256”:xxx,},}
+		ret.update(match2(file_path, args, frame))
+		result = {file_path: ret}
+		# print(str(result))
 		print_result(result, frame)
 		return result
 	elif os.path.isdir(file_path):  # 是目录
