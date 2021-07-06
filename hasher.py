@@ -1,6 +1,6 @@
-from MainPage import *
+from view import *
 
 root = tk.Tk()
-root.title('Hasher')
-MainPage(root)
+root.title('Hasher  by yunlong')
+CalHashFrame(root).pack()
 root.mainloop()
